@@ -97,7 +97,7 @@ export const loadChannels = (
                 await new Promise((resolve) => {
                     loadCategory(categoryData, guild, rateLimitManager).then((createdCategory) => {
                         categoryData.children.forEach((channelData) => {
-                            loadChannel(channelData, guild, createdCategory, options);
+                            loadChannel(channelData, guild, createdCategory, options, rateLimitManager);
                             resolve(true);
                         });
                     });

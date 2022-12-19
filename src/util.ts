@@ -206,7 +206,7 @@ export async function loadCategory(categoryData: CategoryData, guild: Guild, rat
                         });
                     }
                 });
-                await rateLimitManager.resolver([category.permissionOverwrites, 'set', finalPermissions]);
+                await rateLimitManager.resolver(category.permissionOverwrites, 'set', finalPermissions);
                 resolve(category); // Return the category
             });
     });

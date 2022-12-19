@@ -148,7 +148,7 @@ export async function fetchTextChannelData(channel: TextChannel | NewsChannel, o
             topic: channel.topic,
             permissions: fetchChannelPermissions(channel),
             messages: [],
-            isNews: channel.type === ChannelType.GuildNews,
+            isNews: channel.type === ChannelType.GuildAnnouncement,
             threads: []
         };
         /* Fetch channel threads */

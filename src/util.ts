@@ -10,7 +10,6 @@ import type {
 } from './types';
 import {
     CategoryChannel,
-    ChannelLogsQueryOptions,
     ChannelType,
     Collection,
     Guild,
@@ -20,22 +19,26 @@ import {
     GuildChannelCreateOptions,
     Message,
     OverwriteData,
+    OverwriteType,
     Snowflake,
     TextChannel,
     VoiceChannel,
     NewsChannel,
-    PremiumTier,
+    GuildPremiumTier,
     ThreadChannel,
-    GuildFeatures,
-    Webhook
+    Webhook,
+    FetchMessagesOptions,
+    GuildExplicitContentFilter,
+    GuildVerificationLevel
 } from 'discord.js';
 import nodeFetch from 'node-fetch';
+import { RateLimitManager } from './ratelimit';
 
-const MaxBitratePerTier: Record<PremiumTier, number> = {
-    None: 64000,
-    Tier1: 128000,
-    Tier2: 256000,
-    Tier3: 384000
+const MaxBitratePerTier: Record<GuildPremiumTier, number> = {
+    [GuildPremiumTier.None]: 64000,
+    [GuildPremiumTier.Tier1]: 128000,
+    [GuildPremiumTier.Tier2]: 256000,
+    [GuildPremiumTier.Tier3]: 384000
 };
 
 /**
@@ -44,7 +47,7 @@ const MaxBitratePerTier: Record<PremiumTier, number> = {
 export function fetchChannelPermissions(channel: TextChannel | VoiceChannel | CategoryChannel | NewsChannel) {
     const permissions: ChannelPermissionsData[] = [];
     channel.permissionOverwrites.cache
-        .filter((p) => p.type === 'role')
+        .filter((p) => p.type === OverwriteType.Role)
         .forEach((perm) => {
             // For each overwrites permission
             const role = channel.guild.roles.cache.get(perm.id);
@@ -83,7 +86,7 @@ export async function fetchChannelMessages(
 ): Promise<MessageData[]> {
     let messages: MessageData[] = [];
     const messageCount: number = isNaN(options.maxMessagesPerChannel) ? 10 : options.maxMessagesPerChannel;
-    const fetchOptions: ChannelLogsQueryOptions = { limit: 100 };
+    const fetchOptions: FetchMessagesOptions = { limit: 100 };
     let lastMessageId: Snowflake;
     let fetchComplete: boolean = false;
     while (!fetchComplete) {
@@ -188,10 +191,8 @@ export async function fetchTextChannelData(channel: TextChannel | NewsChannel, o
  */
 export async function loadCategory(categoryData: CategoryData, guild: Guild, rateLimitManager: RateLimitManager) {
     return new Promise<CategoryChannel>((resolve) => {
-        guild.channels
-            .create(categoryData.name, {
-                type: ChannelType.GuildCategory
-            })
+        rateLimitManager
+            .resolver(guild.channels, 'create', categoryData.name, { type: ChannelType.GuildCategory })
             .then(async (category) => {
                 // When the category is created
                 const finalPermissions: OverwriteData[] = [];
@@ -205,7 +206,7 @@ export async function loadCategory(categoryData: CategoryData, guild: Guild, rat
                         });
                     }
                 });
-                await category.permissionOverwrites.set(finalPermissions);
+                await rateLimitManager.resolver([category.permissionOverwrites, 'set', finalPermissions]);
                 resolve(category); // Return the category
             });
     });
@@ -279,13 +280,13 @@ export async function loadChannel(
             let bitrate = (channelData as VoiceChannelData).bitrate;
             const bitrates = Object.values(MaxBitratePerTier);
             while (bitrate > MaxBitratePerTier[guild.premiumTier]) {
-                bitrate = bitrates[Object.keys(MaxBitratePerTier).indexOf(guild.premiumTier) - 1];
+                bitrate = bitrates[guild.premiumTier];
             }
             createOptions.bitrate = bitrate;
             createOptions.userLimit = (channelData as VoiceChannelData).userLimit;
             createOptions.type = ChannelType.GuildVoice;
         }
-        guild.channels.create(createOptions).then(async (channel) => {
+        rateLimitManager.resolver(guild.channels, 'create', createOptions).then(async (channel) => {
             /* Update channel permissions */
             const finalPermissions: OverwriteData[] = [];
             channelData.permissions.forEach((perm) => {
@@ -351,30 +352,30 @@ export async function clearGuild(guild: Guild, rateLimitManager: RateLimitManage
     guild.emojis.cache.forEach((emoji) => {
         rateLimitManager.resolver(emoji, 'delete').catch(() => {});
     });
-    const webhooks = await rateLimitManager.resolver(guild, 'fetchWebhooks');
-    webhooks.forEach((webhook: any) => {
+    const webhooks = await guild.fetchWebhooks();
+    webhooks.forEach((webhook) => {
         rateLimitManager.resolver(webhook, 'delete').catch(() => {});
     });
     const bans = await guild.bans.fetch();
     bans.forEach((ban) => {
-        guild.members.unban(ban.user).catch(() => {});
+        rateLimitManager.resolver(guild.members, 'unban', ban.user).catch(() => {});
     });
-    guild.setAFKChannel(null);
-    guild.setAFKTimeout(60 * 5);
-    guild.setIcon(null);
-    guild.setBanner(null).catch(() => {});
-    guild.setSplash(null).catch(() => {});
-    guild.setDefaultMessageNotifications(GuildDefaultMessageNotifications.OnlyMentions);
-    guild.setWidgetSettings({
+    rateLimitManager.resolver(guild, 'setAFKChannel', null);
+    rateLimitManager.resolver(guild, 'setAFKTimeout', 60 * 5);
+    rateLimitManager.resolver(guild, 'setIcon', null);
+    rateLimitManager.resolver(guild, 'setBanner', null).catch(() => {});
+    rateLimitManager.resolver(guild, 'setSplash', null).catch(() => {});
+    rateLimitManager.resolver(guild, 'setDefaultMessageNotifications', GuildDefaultMessageNotifications.OnlyMentions);
+    rateLimitManager.resolver(guild, 'setWidgetSettings', {
         enabled: false,
         channel: null
     });
     if (!guild.features.includes(GuildFeature.Community)) {
-        guild.setExplicitContentFilter(GuildExplicitContentFilter.Disabled);
-        guild.setVerificationLevel(GuildVerificationLevel.None);
+        rateLimitManager.resolver(guild, 'setExplicitContentFilter', GuildExplicitContentFilter.Disabled);
+        rateLimitManager.resolver(guild, 'setVerificationLevel', GuildVerificationLevel.None);
     }
-    guild.setSystemChannel(null);
-    guild.setSystemChannelFlags([
+    rateLimitManager.resolver(guild, 'setSystemChannel', null);
+    rateLimitManager.resolver(guild, 'setSystemChannelFlags', [
         GuildSystemChannelFlags.SuppressGuildReminderNotifications,
         GuildSystemChannelFlags.SuppressJoinNotifications,
         GuildSystemChannelFlags.SuppressPremiumSubscriptions

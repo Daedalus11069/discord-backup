@@ -1,5 +1,5 @@
 import type { BackupData, LoadOptions } from './types';
-import type { ChannelType, Emoji, Guild, GuildFeature, GuildChannel, Role, VoiceChannel } from 'discord.js';
+import { ChannelType, Emoji, Guild, GuildFeature, Role, VoiceChannel } from 'discord.js';
 import { loadCategory, loadChannel } from './util';
 import { RateLimitManager } from './ratelimit';
 
@@ -28,7 +28,7 @@ export const loadConfig = (
     if (backupData.bannerBase64) {
         configPromises.push([guild, 'setBanner', Buffer.from(backupData.bannerBase64, 'base64')]);
     } else if (backupData.bannerURL) {
-        configPromises.push(guild.setBanner(backupData.bannerURL));
+        configPromises.push([guild, 'setBanner', backupData.bannerURL]);
     }
     if (backupData.verificationLevel) {
         configPromises.push([guild, 'setVerificationLevel', backupData.verificationLevel]);
@@ -51,7 +51,7 @@ export const loadRoles = (
     backupData: BackupData,
     rateLimitManager: RateLimitManager
 ): Promise<Role[]> => {
-    const rolePromises: [Promise<Role>[]?, any?] = [];
+    const rolePromises: [Promise<Role>[]?, any[]?] = [];
     backupData.roles.forEach((roleData) => {
         if (roleData.isEveryone) {
             rolePromises.push([
@@ -65,15 +65,17 @@ export const loadRoles = (
                 }
             ]);
         } else {
-            rolePromises.push(
-                guild.roles.create({
+            rolePromises.push([
+                guild.roles,
+                'create',
+                {
                     name: roleData.name,
                     color: roleData.color,
                     hoist: roleData.hoist,
                     permissions: BigInt(roleData.permissions),
                     mentionable: roleData.mentionable
-                })
-            );
+                }
+            ]);
         }
     });
     return rateLimitManager.resolver(rolePromises);
@@ -95,7 +97,7 @@ export const loadChannels = (
                 await new Promise((resolve) => {
                     loadCategory(categoryData, guild, rateLimitManager).then((createdCategory) => {
                         categoryData.children.forEach((channelData) => {
-                            loadChannel(channelData, guild, createdCategory, options, rateLimitManager);
+                            loadChannel(channelData, guild, createdCategory, options);
                             resolve(true);
                         });
                     });
@@ -115,8 +117,14 @@ export const loadChannels = (
 export const loadAFK = (guild: Guild, backupData: BackupData, rateLimitManager: RateLimitManager): Promise<Guild[]> => {
     const afkPromises: [Promise<Guild>[]?, any[]?] = [];
     if (backupData.afk) {
-        afkPromises.push(guild.setAFKChannel(guild.channels.cache.find((ch) => ch.name === backupData.afk.name && ch.type === ChannelType.GuildVoice) as VoiceChannel));
-        afkPromises.push(guild.setAFKTimeout(backupData.afk.timeout));
+        afkPromises.push([
+            guild,
+            'setAFKChannel',
+            guild.channels.cache.find(
+                (ch) => ch.name === backupData.afk.name && ch.type === ChannelType.GuildVoice
+            ) as VoiceChannel
+        ]);
+        afkPromises.push([guild, 'setAFKTimeout', backupData.afk.timeout]);
     }
     return rateLimitManager.resolver(afkPromises);
 };
@@ -132,12 +140,22 @@ export const loadEmojis = (
     const emojiPromises: [Promise<Emoji>[]?, any[]?] = [];
     backupData.emojis.forEach((emoji) => {
         if (emoji.url) {
-            emojiPromises.push([guild.emojis, 'create', { attachment: emoji.url, name: emoji.name }]);
+            emojiPromises.push([
+                guild.emojis,
+                'create',
+                {
+                    name: emoji.name,
+                    attachment: emoji.url
+                }
+            ]);
         } else if (emoji.base64) {
             emojiPromises.push([
                 guild.emojis,
                 'create',
-                { attachment: Buffer.from(emoji.base64, 'base64'), name: emoji.name }
+                {
+                    name: emoji.name,
+                    attachment: Buffer.from(emoji.base64, 'base64')
+                }
             ]);
         }
     });
@@ -174,12 +192,16 @@ export const loadEmbedChannel = (
     backupData: BackupData,
     rateLimitManager: RateLimitManager
 ): Promise<Guild[]> => {
-    const embedChannelPromises: [Promise<Guild>[]?, any?] = [];
+    const embedChannelPromises: [Promise<Guild>[]?, any[]?] = [];
     if (backupData.widget.channel) {
-        embedChannelPromises.push(
-            guild.setWidgetSettings({
+        embedChannelPromises.push([
+            guild,
+            'setWidgetSettings',
+            {
                 enabled: backupData.widget.enabled,
-                channel: guild.channels.cache.find((ch) => ch.name === backupData.widget.channel)
+                channel: guild.channels.cache
+                    .filter((ch) => ch.type !== ChannelType.GuildCategory)
+                    .find((ch) => ch.name === backupData.widget.channel)
             }
         ]);
     }

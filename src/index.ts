@@ -97,6 +97,7 @@ export const create = async (
                 emojis: [],
                 members: [],
                 createdTimestamp: Date.now(),
+                guildID: guild.id,
                 id: options.backupID ?? SnowflakeUtil.generate({ timestamp: Date.now() })
             };
             if (options.includeName) {
@@ -104,11 +105,11 @@ export const create = async (
             }
             if (guild.iconURL()) {
                 if (options && options.saveImages && options.saveImages === 'base64') {
-                    backupData.iconBase64 = (await nodeFetch(guild.iconURL()).then((res) => res.buffer())).toString(
-                        'base64'
-                    );
+                    backupData.iconBase64 = (
+                        await nodeFetch(guild.iconURL({ forceStatic: false })).then((res) => res.buffer())
+                    ).toString('base64');
                 }
-                backupData.iconURL = guild.iconURL();
+                backupData.iconURL = guild.iconURL({ forceStatic: false });
             }
             if (guild.splashURL()) {
                 if (options && options.saveImages && options.saveImages === 'base64') {
@@ -149,12 +150,12 @@ export const create = async (
             if (!options || options.jsonSave === undefined || options.jsonSave) {
                 // Convert Object to JSON
                 const backupJSON = options.jsonBeautify
-                    ? JSON.stringify(backupData, (k, v) => (typeof v === 'bigint' ? v.toString() : v), 4)
-                    : JSON.stringify(backupData, (k, v) => (typeof v === 'bigint' ? v.toString() : v));
+                    ? JSON.stringify(backupData, null, 4)
+                    : JSON.stringify(backupData);
                 // Save the backup
                 await writeFile(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
             }
-            // Returns BackupData
+            // Returns ID
             resolve(backupData);
         } catch (e) {
             return reject(e);
@@ -180,6 +181,7 @@ export const load = async (
         }
         try {
             const backupData: BackupData = typeof backup === 'string' ? await getBackupData(backup) : backup;
+
             // Parse mode
             if (typeof options.mode != 'string' && typeof options.mode != 'number')
                 throw new Error('Bad options, mode must be string or number');
@@ -201,7 +203,6 @@ export const load = async (
                     // Clear the guild
                     await utilMaster.clearGuild(guild, rateLimitManager);
                 }
-
                 await Promise.all([
                     // Restore guild configuration
                     loadMaster.loadConfig(guild, backupData, rateLimitManager),

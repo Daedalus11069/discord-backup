@@ -7,4 +7,5 @@ export interface MessageData {
     embeds?: Embed[];
     files?: { attachment: BufferResolvable; name: string; description?: string }[];
     pinned?: boolean;
+    sentAt: string;
 }

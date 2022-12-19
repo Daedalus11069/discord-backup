@@ -1,14 +1,12 @@
 import type { BackupData, BackupInfos, CreateOptions, LoadOptions } from './types/';
 import type { Guild } from 'discord.js';
-import { SnowflakeUtil } from 'discord.js';
+import { SnowflakeUtil, IntentsBitField } from 'discord.js';
 
 import nodeFetch from 'node-fetch';
 import { sep } from 'path';
 
-import { existsSync, mkdirSync, readdir, statSync, unlinkSync, writeFile } from 'fs';
-import { promisify } from 'util';
-const writeFileAsync = promisify(writeFile);
-const readdirAsync = promisify(readdir);
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
+import { writeFile, readdir } from 'fs/promises';
 
 import * as createMaster from './create';
 import * as loadMaster from './load';
@@ -25,7 +23,7 @@ if (!existsSync(backups)) {
  */
 const getBackupData = async (backupID: string) => {
     return new Promise<BackupData>(async (resolve, reject) => {
-        const files = await readdirAsync(backups); // Read "backups" directory
+        const files = await readdir(backups); // Read "backups" directory
         // Try to get the json file
         const file = files.filter((f) => f.split('.').pop() === 'json').find((f) => f === `${backupID}.json`);
         if (file) {
@@ -74,12 +72,17 @@ export const create = async (
         jsonBeautify: true,
         includeName: true,
         doNotBackup: [],
+        backupMembers: false,
         saveImages: ''
     }
 ) => {
     return new Promise<BackupData>(async (resolve, reject) => {
+        const intents = new IntentsBitField(guild.client.options.intents);
+        if (!intents.has(IntentsBitField.Flags.Guilds)) return reject('Guilds intent is required');
+
         try {
             const backupData: BackupData = {
+                name: guild.name,
                 verificationLevel: guild.verificationLevel,
                 explicitContentFilter: guild.explicitContentFilter,
                 defaultMessageNotifications: guild.defaultMessageNotifications,
@@ -92,6 +95,7 @@ export const create = async (
                 roles: [],
                 bans: [],
                 emojis: [],
+                members: [],
                 createdTimestamp: Date.now(),
                 id: options.backupID ?? SnowflakeUtil.generate({ timestamp: Date.now() })
             };
@@ -122,6 +126,10 @@ export const create = async (
                 }
                 backupData.bannerURL = guild.bannerURL();
             }
+            if (options && options.backupMembers) {
+                // Backup members
+                backupData.members = await createMaster.getMembers(guild);
+            }
             if (!options || !(options.doNotBackup || []).includes('bans')) {
                 // Backup bans
                 backupData.bans = await createMaster.getBans(guild);
@@ -144,7 +152,7 @@ export const create = async (
                     ? JSON.stringify(backupData, (k, v) => (typeof v === 'bigint' ? v.toString() : v), 4)
                     : JSON.stringify(backupData, (k, v) => (typeof v === 'bigint' ? v.toString() : v));
                 // Save the backup
-                await writeFileAsync(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
+                await writeFile(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
             }
             // Returns BackupData
             resolve(backupData);
@@ -240,7 +248,7 @@ export const remove = async (backupID: string) => {
  * Returns the list of all backup
  */
 export const list = async () => {
-    const files = await readdirAsync(backups); // Read "backups" directory
+    const files = await readdir(backups); // Read "backups" directory
     return files.map((f) => f.split('.')[0]);
 };
 

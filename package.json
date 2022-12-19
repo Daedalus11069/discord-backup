@@ -37,7 +37,7 @@
         "node-fetch": "^2.6.7"
     },
     "devDependencies": {
-        "@types/node": "^16.11.47",
+        "@types/node": "^17.0.30",
         "@types/node-fetch": "^2.6.2",
         "@types/ws": "^7.2.4",
         "prettier": "^2.0.4",

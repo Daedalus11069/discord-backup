@@ -1,6 +1,8 @@
-import type { BackupData, BackupInfos, CreateOptions, LoadOptions } from './types/';
-import type { Guild } from 'discord.js';
-import { SnowflakeUtil, IntentsBitField } from 'discord.js';
+import { MessageData } from './types/MessageData';
+import { ThreadChannelData } from './types/ThreadChannelData';
+import type { BackupData, BackupInfos, CreateOptions, LoadOptions, TextChannelData } from './types/';
+import type { Guild, TextChannel } from 'discord.js';
+import { SnowflakeUtil, IntentsBitField, ThreadChannel, CategoryChannel, ChannelType } from 'discord.js';
 
 import nodeFetch from 'node-fetch';
 import { sep } from 'path';
@@ -159,6 +161,69 @@ export const create = async (
         } catch (e) {
             return reject(e);
         }
+    });
+};
+
+export const addThreadToBackup = async (
+    guild: Guild,
+    backup: string | BackupData,
+    parentChannelId: string,
+    threadId: string,
+    options: CreateOptions = {
+        maxMessagesPerChannel: 10,
+        saveImages: ''
+    }
+): Promise<{ name: string; messageCount: number }> => {
+    return new Promise(async (resolve, reject) => {
+        if (!guild) {
+            return reject('Invalid guild');
+        }
+        const backupData: BackupData = typeof backup === 'string' ? await getBackupData(backup) : backup;
+        const parentChannel = await guild.channels.fetch(parentChannelId);
+        const thread = (await guild.channels.fetch(threadId)) as ThreadChannel;
+
+        for await (const [catIdx, cat] of backupData.channels.categories.entries()) {
+            const category = guild.channels.cache.find((c) => cat.name === c.name);
+            if (typeof category !== 'undefined') {
+                const children = (category as CategoryChannel).children.cache
+                    .sort((a, b) => a.position - b.position)
+                    .toJSON();
+                for await (const [childIdx, child] of children.entries()) {
+                    // For each child channel
+                    if (
+                        child.name === parentChannel.name &&
+                        (child.type === ChannelType.GuildText || child.type === ChannelType.GuildAnnouncement)
+                    ) {
+                        for await (const [tIdx, t] of child.threads.cache.entries()) {
+                            if (t.name === thread.name) {
+                                const messageData: MessageData[] = await utilMaster.fetchChannelMessages(t, options); // Gets the channel data
+                                const chldIdx = backupData.channels.categories[catIdx].children.findIndex(
+                                    (chld) => chld.name === child.name
+                                );
+                                (backupData.channels.categories[catIdx].children[
+                                    chldIdx
+                                ] as TextChannelData).threads.push({
+                                    type: t.type,
+                                    name: t.name,
+                                    archived: t.archived,
+                                    autoArchiveDuration: t.autoArchiveDuration,
+                                    locked: t.locked,
+                                    rateLimitPerUser: t.rateLimitPerUser,
+                                    messages: messageData
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Convert Object to JSON
+        const backupJSON = options.jsonBeautify
+            ? JSON.stringify(backupData, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 4)
+            : JSON.stringify(backupData, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+        // Save the backup
+        await writeFile(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
+        resolve({ name: thread.name, messageCount: thread.messageCount });
     });
 };
 

@@ -118,6 +118,9 @@ export async function fetchChannelMessages(
                         };
                     })
                 );
+                if (!channel.isThread() || (channel.isThread() && !(channel as ThreadChannel).archived)) {
+                    await msg.react('🅰️');
+                }
                 messages.push({
                     username: msg.author.username,
                     avatar: msg.author.displayAvatarURL(),

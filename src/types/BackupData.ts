@@ -1,9 +1,14 @@
-import { GuildDefaultMessageNotifications, GuildExplicitContentFilter, GuildVerificationLevel, Snowflake } from 'discord.js';
+import {
+    GuildDefaultMessageNotifications,
+    GuildExplicitContentFilter,
+    GuildVerificationLevel,
+    Snowflake
+} from 'discord.js';
 import { AfkData, BanData, ChannelsData, EmojiData, RoleData, WidgetData } from './';
 import { MemberData } from './MemberData';
 
 export interface BackupData {
-    name: string;
+    name?: string;
     iconURL?: string;
     iconBase64?: string;
     verificationLevel: GuildVerificationLevel;

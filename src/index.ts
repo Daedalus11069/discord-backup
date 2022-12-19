@@ -82,7 +82,6 @@ export const create = async (
 
         try {
             const backupData: BackupData = {
-                name: guild.name,
                 verificationLevel: guild.verificationLevel,
                 explicitContentFilter: guild.explicitContentFilter,
                 defaultMessageNotifications: guild.defaultMessageNotifications,

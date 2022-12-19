@@ -77,7 +77,7 @@ export const create = async (
     }
 ) => {
     return new Promise<BackupData>(async (resolve, reject) => {
-        const intents = new IntentsBitField(guild.client.options.intents);
+        const intents = new IntentsBitField(guild.client.options.intents.bitfield);
         if (!intents.has(IntentsBitField.Flags.Guilds)) return reject('Guilds intent is required');
 
         try {
@@ -150,8 +150,8 @@ export const create = async (
             if (!options || options.jsonSave === undefined || options.jsonSave) {
                 // Convert Object to JSON
                 const backupJSON = options.jsonBeautify
-                    ? JSON.stringify(backupData, null, 4)
-                    : JSON.stringify(backupData);
+                    ? JSON.stringify(backupData, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 4)
+                    : JSON.stringify(backupData, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
                 // Save the backup
                 await writeFile(`${backups}${sep}${backupData.id}.json`, backupJSON, 'utf-8');
             }

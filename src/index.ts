@@ -194,6 +194,8 @@ export const load = async (
                         : options.mode == 'fast'
                         ? 250
                         : 750
+                    : typeof options.mode == 'number'
+                    ? options.mode
                     : 750
             );
 
